@@ -1,4 +1,5 @@
 # System libs
+import pdb
 import os
 import argparse
 from distutils.version import LooseVersion
@@ -32,63 +33,73 @@ def visualize_result(data, pred, cfg):
 
     # print predictions in descending order
     pred = np.int32(pred)
-    pixs = pred.size
-    uniques, counts = np.unique(pred, return_counts=True)
-    print("Predictions in [{}]:".format(info))
-    for idx in np.argsort(counts)[::-1]:
-        name = names[uniques[idx] + 1]
-        ratio = counts[idx] / pixs * 100
-        if ratio > 0.1:
-            print("  {}: {:.2f}%".format(name, ratio))
+    #pixs = pred.size
+    #uniques, counts = np.unique(pred, return_counts=True)
+    #print("Predictions in [{}]:".format(info))
+    #for idx in np.argsort(counts)[::-1]:
+    #    name = names[uniques[idx] + 1]
+    #    ratio = counts[idx] / pixs * 100
+    #    if ratio > 0.1:
+    #        print("  {}: {:.2f}%".format(name, ratio))
 
-    # colorize prediction
-    pred_color = colorEncode(pred, colors).astype(np.uint8)
+    ## colorize prediction
+    #pred_color = colorEncode(pred, colors).astype(np.uint8)
 
     # aggregate images and save
-    im_vis = np.concatenate((img, pred_color), axis=1)
+    #im_vis = np.concatenate((img, pred_color), axis=1)
 
     img_name = info.split('/')[-1]
-    Image.fromarray(im_vis).save(
-        os.path.join(cfg.TEST.result, img_name.replace('.jpg', '.png')))
+    #Image.fromarray(im_vis).save(
+    #    os.path.join(cfg.TEST.result, img_name.replace('.jpg', '.png')))
+    ##### save label as P
+    palette = colors.reshape(-1)
+    palette = list(palette)
+    palette += ([0] * (256*3-len(palette)))
+    pred_label = pred.astype(np.uint8)
+    pred_label = Image.fromarray(pred_label).convert("P")
+    pred_label.putpalette(palette)
+    pred_label.save(os.path.join(cfg.TEST.result, img_name.replace('.jpg', '.png')))
+
 
 
 def test(segmentation_module, loader, gpu):
     segmentation_module.eval()
 
     pbar = tqdm(total=len(loader))
-    for batch_data in loader:
+    for all_batch_data in loader:
         # process data
-        batch_data = batch_data[0]
-        segSize = (batch_data['img_ori'].shape[0],
-                   batch_data['img_ori'].shape[1])
-        img_resized_list = batch_data['img_data']
+        for batch_data in all_batch_data:
+            #batch_data = batch_data[0]
+            segSize = (batch_data['img_ori'].shape[0],
+                       batch_data['img_ori'].shape[1])
+            img_resized_list = batch_data['img_data']
 
-        with torch.no_grad():
-            scores = torch.zeros(1, cfg.DATASET.num_class, segSize[0], segSize[1])
-            scores = async_copy_to(scores, gpu)
+            with torch.no_grad():
+                scores = torch.zeros(1, cfg.DATASET.num_class, segSize[0], segSize[1])
+                scores = async_copy_to(scores, gpu)
 
-            for img in img_resized_list:
-                feed_dict = batch_data.copy()
-                feed_dict['img_data'] = img
-                del feed_dict['img_ori']
-                del feed_dict['info']
-                feed_dict = async_copy_to(feed_dict, gpu)
+                for img in img_resized_list:
+                    feed_dict = batch_data.copy()
+                    feed_dict['img_data'] = img
+                    del feed_dict['img_ori']
+                    del feed_dict['info']
+                    feed_dict = async_copy_to(feed_dict, gpu)
 
-                # forward pass
-                pred_tmp = segmentation_module(feed_dict, segSize=segSize)
-                scores = scores + pred_tmp / len(cfg.DATASET.imgSizes)
+                    # forward pass
+                    pred_tmp = segmentation_module(feed_dict, segSize=segSize)
+                    scores = scores + pred_tmp / len(cfg.DATASET.imgSizes)
 
-            _, pred = torch.max(scores, dim=1)
-            pred = as_numpy(pred.squeeze(0).cpu())
+                _, pred = torch.max(scores, dim=1)
+                pred = as_numpy(pred.squeeze(0).cpu())
 
-        # visualization
-        visualize_result(
-            (batch_data['img_ori'], batch_data['info']),
-            pred,
-            cfg
-        )
+            # visualization
+            visualize_result(
+                (batch_data['img_ori'], batch_data['info']),
+                pred,
+                cfg
+            )
 
-        pbar.update(1)
+            pbar.update(1)
 
 
 def main(cfg, gpu):
@@ -187,6 +198,10 @@ if __name__ == '__main__':
     # generate testing image list
     if os.path.isdir(args.imgs[0]):
         imgs = find_recursive(args.imgs[0])
+    elif args.imgs.endswith(".txt"):
+        lines = open(args.imgs, "r").readlines()
+        lines = list(map(lambda x: x.strip("\n"), lines))
+        imgs = lines
     else:
         imgs = [args.imgs]
     assert len(imgs), "imgs should be a path to image (.jpg) or directory."

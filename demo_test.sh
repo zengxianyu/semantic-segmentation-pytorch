@@ -1,12 +1,13 @@
 #!/bin/bash
 
 # Image and model names
-TEST_IMG=ADE_val_00001519.jpg
-MODEL_PATH=ade20k-resnet50dilated-ppm_deepsup
+#TEST_IMG=ADE_val_00001519.jpg
+TEST_IMG=list_ECSSD.txt
+MODEL_PATH=ade20k-resnet101-upernet
 RESULT_PATH=./
 
-ENCODER=$MODEL_PATH/encoder_epoch_20.pth
-DECODER=$MODEL_PATH/decoder_epoch_20.pth
+ENCODER=$MODEL_PATH/encoder_epoch_50.pth
+DECODER=$MODEL_PATH/decoder_epoch_50.pth
 
 # Download model weights and image
 if [ ! -e $MODEL_PATH ]; then
@@ -25,7 +26,8 @@ fi
 # Inference
 python3 -u test.py \
   --imgs $TEST_IMG \
-  --cfg config/ade20k-resnet50dilated-ppm_deepsup.yaml \
+  --cfg config/ade20k-resnet101-upernet.yaml \
   DIR $MODEL_PATH \
-  TEST.result ./ \
-  TEST.checkpoint epoch_20.pth
+  TEST.result ./result \
+  TEST.batch_size 2\
+  TEST.checkpoint epoch_50.pth
